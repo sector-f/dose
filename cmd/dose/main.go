@@ -25,7 +25,7 @@ type Download struct {
 	BytesRead  uint
 	BytesTotal *uint
 	StartTime  time.Time
-	Canceler   context.CancelFunc
+	Cancel     context.CancelFunc
 }
 
 type readerFunc func(p []byte) (n int, err error)
@@ -64,7 +64,7 @@ func (s *DownloadServer) Download(url string, path string) {
 		defer resp.Body.Close()
 
 		newContext, cancelFunc := context.WithCancel(resp.Request.Context())
-		download.Canceler = cancelFunc
+		download.Cancel = cancelFunc
 
 		func(ctx context.Context, dst io.Writer, src io.Reader) {
 			io.Copy(dst, readerFunc(func(p []byte) (int, error) {
@@ -86,7 +86,7 @@ func (s *DownloadServer) Download(url string, path string) {
 func (s *DownloadServer) Cancel(path string) error {
 	dl, prs := s.Downloads[filepath.Clean(path)]
 	if prs {
-		dl.Canceler()
+		dl.Cancel()
 		dl.Status = dose.Canceled
 		return nil
 	}

@@ -1,62 +1,56 @@
 package main
 
 import (
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
-
-	"github.com/sector-f/dose"
 )
+
+func printHelp() {
+	fmt.Printf("Usage:\n")
+	fmt.Printf("%v add URL PATH\n", os.Args[0])
+	fmt.Printf("%v cancel PATH\n", os.Args[0])
+}
 
 func main() {
 	args := os.Args
 
-	if len(args) != 3 {
+	if len(args) < 2 {
+		printHelp()
 		os.Exit(1)
 	}
 
-	url := args[1]
-	filepath := args[2]
+	switch args[1] {
+	case "add":
+		if len(args) != 4 {
+			printHelp()
+			os.Exit(1)
+		}
 
-	if url == "" || filepath == "" {
-		os.Exit(1)
-	}
+		url := args[2]
+		filepath := args[3]
 
-	data := dose.AddRequest{
-		url,
-		filepath,
-	}
+		if url == "" || filepath == "" {
+			printHelp()
+			os.Exit(1)
+		}
 
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+		download(url, filepath)
+	case "cancel":
+		if len(args) != 3 {
+			printHelp()
+			os.Exit(1)
+		}
 
-	var messageType [2]byte
-	binary.BigEndian.PutUint16(messageType[:], uint16(dose.AddRequestMessage))
+		filepath := args[2]
 
-	var length [2]byte
-	binary.BigEndian.PutUint16(length[:], uint16(len(encoded)))
+		if filepath == "" {
+			printHelp()
+			os.Exit(1)
+		}
 
-	header := append(messageType[:], length[:]...)
-
-	conn, err := net.Dial("unix", "/tmp/dose.socket")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	_, err = conn.Write(header)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	_, err = conn.Write(encoded)
-	if err != nil {
-		fmt.Println(err)
+		cancel(filepath)
+	case "help", "-h", "--help":
+		printHelp()
+		os.Exit(0)
 	}
 }

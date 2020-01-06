@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/sector-f/dose"
@@ -106,11 +107,13 @@ func (s *DownloadServer) Cancel(path string) error {
 func main() {
 	downloadServer := DownloadServer{make(map[string]*Download)}
 
+	oldUmask := syscall.Umask(0177)
 	listener, err := net.Listen("unix", "/tmp/dose.socket")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	syscall.Umask(oldUmask)
 
 	for {
 		conn, _ := listener.Accept()

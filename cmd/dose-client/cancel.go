@@ -45,4 +45,31 @@ func cancel(filepath string) {
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	var headerBytes [4]byte
+	_, err = conn.Read(headerBytes[:])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	responseHeader := dose.ParseHeader(headerBytes)
+
+	buf := make([]byte, responseHeader.Length)
+	conn.Read(buf)
+
+	response, err := dose.ParseBody(responseHeader.MessageType, buf)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	switch r := response.(type) {
+	case dose.CanceledResponse:
+		fmt.Printf("Canceled download to %v\n", r.Path)
+	case dose.ErrorResponse:
+		fmt.Printf("Received error: %s\n", r.Error)
+	default:
+		fmt.Printf("Received unexpected message of type %v\n", responseHeader.MessageType)
+	}
 }

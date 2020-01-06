@@ -21,7 +21,7 @@ type ServerInfoResponse struct {
 }
 
 type ErrorResponse struct {
-	error string
+	Error string
 }
 
 type DownloadResponse struct {

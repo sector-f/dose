@@ -23,6 +23,8 @@ const (
 	DownloadResponseMessage   MessageType = 10
 )
 
+// Convert request or response to []byte
+// ready to be transmitted on wire
 func MakeBody(r interface{}) ([]byte, error) {
 	var messageType MessageType
 
@@ -65,6 +67,7 @@ func MakeBody(r interface{}) ([]byte, error) {
 	return response, nil
 }
 
+// I feel like generics would be really helpful here
 func ParseBody(messageType MessageType, body []byte) (interface{}, error) {
 	switch messageType {
 	case AddRequestMessage:
@@ -78,6 +81,33 @@ func ParseBody(messageType MessageType, body []byte) (interface{}, error) {
 		return data, nil
 	case CancelRequestMessage:
 		data := CancelRequest{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case AddedResponseMessage:
+		data := AddedResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case CanceledResponseMessage:
+		data := CanceledResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case ErrorResponseMessage:
+		data := ErrorResponse{}
 
 		err := json.Unmarshal(body, &data)
 		if err != nil {

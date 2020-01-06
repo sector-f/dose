@@ -40,11 +40,11 @@ func (s *DownloadServer) Download(url string, path string) {
 	// }
 
 	download := &Download{
-		Url:        url,
-		Status:     dose.Queued,
-		BytesRead:  0,
-		BytesTotal: nil,
-		StartTime:  time.Now(),
+		Url:       url,
+		Status:    dose.Queued,
+		BytesRead: 0,
+		Filesize:  nil,
+		StartTime: time.Now(),
 	}
 	s.Downloads[filepath.Clean(path)] = download
 
@@ -86,9 +86,18 @@ func (s *DownloadServer) Download(url string, path string) {
 func (s *DownloadServer) Cancel(path string) error {
 	dl, prs := s.Downloads[filepath.Clean(path)]
 	if prs {
-		dl.Cancel()
-		dl.Status = dose.Canceled
-		return nil
+		switch dl.Status {
+		case dose.Queued, dose.InProgress, dose.Paused:
+			dl.Cancel()
+			dl.Status = dose.Canceled
+			return nil
+		case dose.Canceled:
+			return errors.New("Download has already been canceled")
+		case dose.Completed:
+			return errors.New("Download has already completed")
+		case dose.Failed:
+			return errors.New("Attempted to cancel failed download")
+		}
 	}
 
 	return errors.New("Download not found")
@@ -130,9 +139,19 @@ func main() {
 			case dose.AddRequest:
 				log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
 				downloadServer.Download(r.Url, r.Path)
+
+				response, _ := dose.MakeBody(dose.AddedResponse{r.Path})
+				c.Write(response)
 			case dose.CancelRequest:
 				log.Printf("CancelRequest: %s\n", r.Path)
-				downloadServer.Cancel(r.Path)
+				err := downloadServer.Cancel(r.Path)
+				if err != nil {
+					response, _ := dose.MakeBody(dose.ErrorResponse{err.Error()})
+					c.Write(response)
+				} else {
+					response, _ := dose.MakeBody(dose.CanceledResponse{r.Path})
+					c.Write(response)
+				}
 			default:
 				return
 			}

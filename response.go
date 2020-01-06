@@ -25,10 +25,10 @@ type ErrorResponse struct {
 }
 
 type DownloadResponse struct {
-	Url        string
-	Path       string
-	Status     DownloadStatus
-	BytesRead  uint
-	BytesTotal *uint
-	StartTime  time.Time
+	Url       string
+	Path      string
+	Status    DownloadStatus
+	BytesRead uint
+	Filesize  *uint
+	StartTime time.Time
 }

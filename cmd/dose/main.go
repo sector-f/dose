@@ -20,12 +20,12 @@ type DownloadServer struct {
 }
 
 type Download struct {
-	Url        string
-	Status     dose.DownloadStatus
-	BytesRead  uint
-	BytesTotal *uint
-	StartTime  time.Time
-	Cancel     context.CancelFunc
+	Url       string
+	Status    dose.DownloadStatus
+	BytesRead uint
+	Filesize  *uint
+	StartTime time.Time
+	Cancel    context.CancelFunc
 }
 
 type readerFunc func(p []byte) (n int, err error)

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +28,7 @@ type Download struct {
 	Filesize  *uint
 	StartTime time.Time
 	Cancel    context.CancelFunc
+	Mu        sync.Mutex
 }
 
 type readerFunc func(p []byte) (n int, err error)
@@ -34,18 +36,14 @@ type readerFunc func(p []byte) (n int, err error)
 func (rf readerFunc) Read(p []byte) (n int, err error) { return rf(p) }
 
 func (s *DownloadServer) Download(url string, path string) {
-	// TODO: Why did I put this here???
-	// _, prs := s.Downloads[filepath.Clean(path)]
-	// if !prs {
-	// 	return errors.New("Download not found")
-	// }
-
+	var mu sync.Mutex
 	download := &Download{
 		Url:       url,
 		Status:    dose.Queued,
 		BytesRead: 0,
 		Filesize:  nil,
 		StartTime: time.Now(),
+		Mu:        mu,
 	}
 	s.Downloads[filepath.Clean(path)] = download
 
@@ -87,6 +85,9 @@ func (s *DownloadServer) Download(url string, path string) {
 func (s *DownloadServer) Cancel(path string) error {
 	dl, prs := s.Downloads[filepath.Clean(path)]
 	if prs {
+		dl.Mu.Lock()
+		defer dl.Mu.Unlock()
+
 		switch dl.Status {
 		case dose.Queued, dose.InProgress, dose.Paused:
 			dl.Cancel()

@@ -1,164 +1,96 @@
 package main
 
 import (
-	"context"
-	"errors"
+	"crypto/tls"
 	"fmt"
-	"io"
-	"log"
 	"net"
-	"net/http"
 	"os"
-	"path/filepath"
-	"sync"
-	"syscall"
-	"time"
 
-	"github.com/sector-f/dose"
+	"github.com/spf13/pflag"
 )
 
-type DownloadServer struct {
-	Downloads map[string]*Download // Map path to Download
-}
+var (
+	certFile    string
+	keyFile     string
+	certificate tls.Certificate
 
-type Download struct {
-	Url       string
-	Status    dose.DownloadStatus
-	BytesRead uint
-	Filesize  *uint
-	StartTime time.Time
-	Cancel    context.CancelFunc
-	Mu        sync.Mutex
-}
-
-type readerFunc func(p []byte) (n int, err error)
-
-func (rf readerFunc) Read(p []byte) (n int, err error) { return rf(p) }
-
-func (s *DownloadServer) Download(url string, path string) {
-	var mu sync.Mutex
-	download := &Download{
-		Url:       url,
-		Status:    dose.Queued,
-		BytesRead: 0,
-		Filesize:  nil,
-		StartTime: time.Now(),
-		Mu:        mu,
-	}
-	s.Downloads[filepath.Clean(path)] = download
-
-	go func() {
-		out, err := os.Create(path)
-		if err != nil {
-			(*download).Status = dose.Failed
-			return
-		}
-		defer out.Close()
-
-		resp, err := http.Get(url)
-		if err != nil {
-			(*download).Status = dose.Failed
-			return
-		}
-		defer resp.Body.Close()
-
-		newContext, cancelFunc := context.WithCancel(resp.Request.Context())
-		download.Cancel = cancelFunc
-
-		func(ctx context.Context, dst io.Writer, src io.Reader) {
-			io.Copy(dst, readerFunc(func(p []byte) (int, error) {
-				select {
-				case <-ctx.Done():
-					return 0, ctx.Err()
-				default:
-					read, err := src.Read(p)
-					if err == nil {
-						download.BytesRead += uint(read)
-					}
-					return read, err
-				}
-			}))
-		}(newContext, out, resp.Body)
-	}()
-}
-
-func (s *DownloadServer) Cancel(path string) error {
-	dl, prs := s.Downloads[filepath.Clean(path)]
-	if prs {
-		dl.Mu.Lock()
-		defer dl.Mu.Unlock()
-
-		switch dl.Status {
-		case dose.Queued, dose.InProgress, dose.Paused:
-			dl.Cancel()
-			dl.Status = dose.Canceled
-			return nil
-		case dose.Canceled:
-			return errors.New("Download has already been canceled")
-		case dose.Completed:
-			return errors.New("Download has already completed")
-		case dose.Failed:
-			return errors.New("Attempted to cancel failed download")
-		}
-	}
-
-	return errors.New("Download not found")
-}
+	tcpBind     []string
+	tcpTlsBind  []string
+	unixBind    []string
+	unixTlsBind []string
+)
 
 func main() {
-	downloadServer := DownloadServer{make(map[string]*Download)}
+	pflag.StringVarP(&certFile, "cert", "", "", "TLS certificate file")
+	pflag.StringVarP(&keyFile, "key", "", "", "TLS key file")
+	pflag.StringArrayVarP(&tcpBind, "tcp", "", []string{}, "TCP socket to bind to")
+	pflag.StringArrayVarP(&tcpTlsBind, "tcptls", "", []string{}, "TCP socket to bind to (with TLS)")
+	pflag.StringArrayVarP(&unixBind, "unix", "", []string{}, "Unix socket to bind to")
+	pflag.StringArrayVarP(&unixTlsBind, "unixtls", "", []string{}, "Unix socket to bind to (with TLS)")
+	showHelp := pflag.BoolP("help", "h", false, "Show help message")
+	pflag.Parse()
 
-	oldUmask := syscall.Umask(0177)
-	listener, err := net.Listen("unix", "/tmp/dose.socket")
-	if err != nil {
-		fmt.Println(err)
+	if *showHelp {
+		pflag.Usage()
+		os.Exit(0)
+	}
+
+	if len(tcpBind) == 0 && len(tcpTlsBind) == 0 && len(unixBind) == 0 && len(unixTlsBind) == 0 {
+		fmt.Fprintln(os.Stderr, "No TCP or Unix socket specified")
 		os.Exit(1)
 	}
-	syscall.Umask(oldUmask)
 
-	for {
-		conn, _ := listener.Accept()
-		go func(c net.Conn) {
-			defer c.Close()
-
-			var headerBytes [4]byte
-			_, err := c.Read(headerBytes[:])
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			header := dose.ParseHeader(headerBytes)
-
-			buf := make([]byte, header.Length)
-			c.Read(buf)
-
-			request, err := dose.ParseBody(header.MessageType, buf)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			switch r := request.(type) {
-			case dose.AddRequest:
-				log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
-				downloadServer.Download(r.Url, r.Path)
-
-				response, _ := dose.MakeBody(dose.AddedResponse{r.Path})
-				c.Write(response)
-			case dose.CancelRequest:
-				log.Printf("CancelRequest: %s\n", r.Path)
-				err := downloadServer.Cancel(r.Path)
-				if err != nil {
-					response, _ := dose.MakeBody(dose.ErrorResponse{err.Error()})
-					c.Write(response)
-				} else {
-					response, _ := dose.MakeBody(dose.CanceledResponse{r.Path})
-					c.Write(response)
-				}
-			default:
-				return
-			}
-		}(conn)
+	if (len(tcpTlsBind) > 0 || len(unixTlsBind) > 0) && (certFile == "" || keyFile == "") {
+		fmt.Fprintln(os.Stderr, "Certificate and keyfile must be specified to use TLS")
+		os.Exit(1)
 	}
+
+	if len(tcpTlsBind) > 0 || len(unixTlsBind) > 0 {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Certificate/key error: %s\n", err.Error())
+			os.Exit(1)
+		}
+		certificate = cert
+	}
+
+	listeners := []*net.Listener{}
+
+	for _, tcp := range tcpBind {
+		listener, err := newTcpSocket(tcp, false)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		listeners = append(listeners, listener)
+	}
+
+	for _, tcp := range tcpTlsBind {
+		listener, err := newTcpSocket(tcp, true)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		listeners = append(listeners, listener)
+	}
+
+	for _, unix := range unixBind {
+		listener, err := newUnixSocket(unix, false)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		listeners = append(listeners, listener)
+	}
+
+	for _, unix := range unixTlsBind {
+		listener, err := newUnixSocket(unix, true)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		listeners = append(listeners, listener)
+	}
+
+	runDownloadServer(listeners)
 }

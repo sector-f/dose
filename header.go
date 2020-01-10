@@ -21,6 +21,8 @@ const (
 	ServerInfoResponseMessage MessageType = 8
 	ErrorResponseMessage      MessageType = 9
 	DownloadResponseMessage   MessageType = 10
+	AuthRequestMessage        MessageType = 11
+	AuthResponseMessage       MessageType = 12
 )
 
 // Convert request or response to []byte
@@ -51,6 +53,10 @@ func MakeBody(r interface{}) ([]byte, error) {
 		messageType = ErrorResponseMessage
 	case DownloadResponse:
 		messageType = DownloadResponseMessage
+	case AuthRequest:
+		messageType = AuthRequestMessage
+	case AuthResponse:
+		messageType = AuthResponseMessage
 	default:
 		return nil, errors.New("Invalid type")
 	}
@@ -162,6 +168,24 @@ func ParseBody(messageType MessageType, body []byte) (interface{}, error) {
 		return data, nil
 	case DownloadResponseMessage:
 		data := DownloadResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case AuthRequestMessage:
+		data := AuthRequest{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case AuthResponseMessage:
+		data := AuthResponse{}
 
 		err := json.Unmarshal(body, &data)
 		if err != nil {

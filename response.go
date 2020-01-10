@@ -32,3 +32,5 @@ type DownloadResponse struct {
 	Filesize  *uint
 	StartTime time.Time
 }
+
+type AuthResponse struct{}

@@ -18,3 +18,8 @@ type InfoRequest struct {
 }
 
 type ServerInfoRequest struct{}
+
+type AuthRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}

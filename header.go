@@ -115,6 +115,60 @@ func ParseBody(messageType MessageType, body []byte) (interface{}, error) {
 		}
 
 		return data, nil
+	case RemoveRequestMessage:
+		data := RemoveRequest{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case InfoRequestMessage:
+		data := InfoRequest{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case ServerInfoRequestMessage:
+		data := ServerInfoRequest{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case InfoResponseMessage:
+		data := InfoResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case ServerInfoResponseMessage:
+		data := ServerInfoResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
+	case DownloadResponseMessage:
+		data := DownloadResponse{}
+
+		err := json.Unmarshal(body, &data)
+		if err != nil {
+			return data, err
+		}
+
+		return data, nil
 	default:
 		return nil, errors.New("Invalid message type")
 	}

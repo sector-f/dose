@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"io"
 )
 
 type MessageType uint16
@@ -25,179 +26,83 @@ const (
 	AuthResponseMessage       MessageType = 12
 )
 
-// Convert request or response to []byte
-// ready to be transmitted on wire
-func MakeBody(r interface{}) ([]byte, error) {
-	var messageType MessageType
+type Message interface {
+	MessageType() MessageType
+}
 
-	switch r.(type) {
-	case AddRequest:
-		messageType = AddRequestMessage
-	case CancelRequest:
-		messageType = CancelRequestMessage
-	case RemoveRequest:
-		messageType = RemoveRequestMessage
-	case InfoRequest:
-		messageType = InfoRequestMessage
-	case ServerInfoRequest:
-		messageType = ServerInfoRequestMessage
-	case AddedResponse:
-		messageType = AddedResponseMessage
-	case CanceledResponse:
-		messageType = CanceledResponseMessage
-	case InfoResponse:
-		messageType = InfoResponseMessage
-	case ServerInfoResponse:
-		messageType = ServerInfoResponseMessage
-	case ErrorResponse:
-		messageType = ErrorResponseMessage
-	case DownloadResponse:
-		messageType = DownloadResponseMessage
-	case AuthRequest:
-		messageType = AuthRequestMessage
-	case AuthResponse:
-		messageType = AuthResponseMessage
-	default:
-		return nil, errors.New("Invalid type")
+func WriteMessage(w io.Writer, m Message) (int, error) {
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return 0, err
 	}
 
-	data, err := json.Marshal(r)
+	var messageType, length [2]byte
+	binary.BigEndian.PutUint16(messageType[:], uint16(m.MessageType()))
+	binary.BigEndian.PutUint16(length[:], uint16(len(encoded)))
+
+	header := append(messageType[:], length[:]...)
+
+	return w.Write(append(header, encoded...))
+}
+
+// Reads header from io.Reader, parses it, reads the message, and parses/returns that
+// Returns a pointer to a Message type, e.g.
+// switch r := response.(type) {
+// case *dose.AddedResponse:
+// }
+func ReadMessage(r io.Reader) (Message, error) {
+	var headerBytes [4]byte
+	_, err := r.Read(headerBytes[:])
 	if err != nil {
 		return nil, err
 	}
 
-	header := DoseHeader{messageType, uint16(len(data))}
-	headerBytes := header.ToBytes()
-	response := append(headerBytes[:], data...)
+	header := ParseHeader(headerBytes)
+	var m Message
 
-	return response, nil
+	buf := make([]byte, header.Length)
+	r.Read(buf)
+
+	switch header.MessageType {
+	case AddRequestMessage:
+		m = &AddRequest{}
+	case AddedResponseMessage:
+		m = &AddedResponse{}
+	case CancelRequestMessage:
+		m = &CancelRequest{}
+	case RemoveRequestMessage:
+		m = &RemoveRequest{}
+	case InfoRequestMessage:
+		m = &InfoRequest{}
+	case ServerInfoRequestMessage:
+		m = &ServerInfoRequest{}
+	case CanceledResponseMessage:
+		m = &CanceledResponse{}
+	case InfoResponseMessage:
+		m = &InfoResponse{}
+	case ServerInfoResponseMessage:
+		m = &ServerInfoResponse{}
+	case ErrorResponseMessage:
+		m = &ErrorResponse{}
+	case DownloadResponseMessage:
+		m = &DownloadResponse{}
+	case AuthRequestMessage:
+		m = &AuthRequest{}
+	case AuthResponseMessage:
+		m = &AuthResponse{}
+	default:
+		return nil, errors.New("Unsupported/invalid message type")
+	}
+
+	err = json.Unmarshal(buf, &m)
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
 // I feel like generics would be really helpful here
-func ParseBody(messageType MessageType, body []byte) (interface{}, error) {
-	switch messageType {
-	case AddRequestMessage:
-		data := AddRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case CancelRequestMessage:
-		data := CancelRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case AddedResponseMessage:
-		data := AddedResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case CanceledResponseMessage:
-		data := CanceledResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case ErrorResponseMessage:
-		data := ErrorResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case RemoveRequestMessage:
-		data := RemoveRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case InfoRequestMessage:
-		data := InfoRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case ServerInfoRequestMessage:
-		data := ServerInfoRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case InfoResponseMessage:
-		data := InfoResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case ServerInfoResponseMessage:
-		data := ServerInfoResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case DownloadResponseMessage:
-		data := DownloadResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case AuthRequestMessage:
-		data := AuthRequest{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	case AuthResponseMessage:
-		data := AuthResponse{}
-
-		err := json.Unmarshal(body, &data)
-		if err != nil {
-			return data, err
-		}
-
-		return data, nil
-	default:
-		return nil, errors.New("Invalid message type")
-	}
-}
-
 type DoseHeader struct {
 	MessageType MessageType
 	Length      uint16

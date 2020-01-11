@@ -33,40 +33,24 @@ func runDownloadServer(listeners []*net.Listener) {
 				go func(c net.Conn) {
 					defer c.Close()
 
-					var headerBytes [4]byte
-					_, err := c.Read(headerBytes[:])
-					if err != nil {
-						log.Println(err)
-						return
-					}
-
-					header := dose.ParseHeader(headerBytes)
-
-					buf := make([]byte, header.Length)
-					c.Read(buf)
-
-					request, err := dose.ParseBody(header.MessageType, buf)
+					request, err := dose.ReadMessage(c)
 					if err != nil {
 						log.Println(err)
 						return
 					}
 
 					switch r := request.(type) {
-					case dose.AddRequest:
+					case *dose.AddRequest:
 						log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
 						downloadServer.Download(r.Url, r.Path)
-
-						response, _ := dose.MakeBody(dose.AddedResponse{r.Path})
-						c.Write(response)
-					case dose.CancelRequest:
+						dose.WriteMessage(c, dose.AddedResponse{r.Path})
+					case *dose.CancelRequest:
 						log.Printf("CancelRequest: %s\n", r.Path)
 						err := downloadServer.Cancel(r.Path)
 						if err != nil {
-							response, _ := dose.MakeBody(dose.ErrorResponse{err.Error()})
-							c.Write(response)
+							dose.WriteMessage(c, dose.ErrorResponse{err.Error()})
 						} else {
-							response, _ := dose.MakeBody(dose.CanceledResponse{r.Path})
-							c.Write(response)
+							dose.WriteMessage(c, dose.CanceledResponse{r.Path})
 						}
 					default:
 						return

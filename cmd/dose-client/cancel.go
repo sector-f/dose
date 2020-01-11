@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -11,23 +9,7 @@ import (
 )
 
 func cancel(filepath string) {
-	data := dose.CancelRequest{
-		filepath,
-	}
-
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	var messageType [2]byte
-	binary.BigEndian.PutUint16(messageType[:], uint16(dose.CancelRequestMessage))
-
-	var length [2]byte
-	binary.BigEndian.PutUint16(length[:], uint16(len(encoded)))
-
-	header := append(messageType[:], length[:]...)
+	data := dose.CancelRequest{filepath}
 
 	conn, err := net.Dial("unix", "/tmp/dose.socket")
 	if err != nil {
@@ -36,40 +18,24 @@ func cancel(filepath string) {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write(header)
+	_, err = dose.WriteMessage(conn, data)
 	if err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	_, err = conn.Write(encoded)
+	response, err := dose.ReadMessage(conn)
 	if err != nil {
 		fmt.Println(err)
-	}
-
-	var headerBytes [4]byte
-	_, err = conn.Read(headerBytes[:])
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	responseHeader := dose.ParseHeader(headerBytes)
-
-	buf := make([]byte, responseHeader.Length)
-	conn.Read(buf)
-
-	response, err := dose.ParseBody(responseHeader.MessageType, buf)
-	if err != nil {
-		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 
 	switch r := response.(type) {
-	case dose.CanceledResponse:
+	case *dose.CanceledResponse:
 		fmt.Printf("Canceled download to %v\n", r.Path)
-	case dose.ErrorResponse:
+	case *dose.ErrorResponse:
 		fmt.Printf("Received error: %s\n", r.Error)
 	default:
-		fmt.Printf("Received unexpected message of type %v\n", responseHeader.MessageType)
+		fmt.Printf("Received unexpected message of type %v\n", response.MessageType())
 	}
 }

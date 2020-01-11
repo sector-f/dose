@@ -2,13 +2,30 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
+	"net/url"
 	"syscall"
 )
 
 func tlsConfig() *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{certificate},
+	}
+}
+
+func bind(u *url.URL) (*net.Listener, error) {
+	switch u.Scheme {
+	case "tcp":
+		return newTcpSocket(u.Host, false)
+	case "tcps":
+		return newTcpSocket(u.Host, true)
+	case "unix":
+		return newUnixSocket(u.Path, false)
+	case "unixs":
+		return newUnixSocket(u.Path, true)
+	default:
+		return nil, errors.New("Unsupported connection type.\nMust be tcp[s]:// or unix[s]://")
 	}
 }
 

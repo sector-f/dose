@@ -8,17 +8,10 @@ import (
 	"github.com/sector-f/dose"
 )
 
-func cancel(filepath string) {
+func cancel(conn net.Conn, filepath string) {
 	data := dose.CancelRequest{filepath}
 
-	conn, err := net.Dial("unix", "/tmp/dose.socket")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	_, err = dose.WriteMessage(conn, data)
+	_, err := dose.WriteMessage(conn, data)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

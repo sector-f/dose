@@ -61,7 +61,10 @@ func ReadMessage(r io.Reader) (Message, error) {
 	var m Message
 
 	buf := make([]byte, header.Length)
-	r.Read(buf)
+	_, err = r.Read(buf)
+	if err != nil {
+		return nil, err
+	}
 
 	switch header.MessageType {
 	case AddRequestMessage:

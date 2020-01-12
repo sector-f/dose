@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
+	"time"
 
 	"github.com/sector-f/dose"
 )
@@ -13,15 +15,17 @@ func download(conn net.Conn, url, filepath string) {
 		filepath,
 	}
 
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	_, err := dose.WriteMessage(conn, data)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, "Error sending message to server")
 		return
 	}
 
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	response, err := dose.ReadMessage(conn)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, "Error receiving message from server")
 		return
 	}
 

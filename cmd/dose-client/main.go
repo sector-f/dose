@@ -52,7 +52,7 @@ func main() {
 
 	args := pflag.Args()
 
-	if len(args) < 2 {
+	if len(args) < 1 {
 		printHelp()
 		os.Exit(1)
 	}
@@ -87,6 +87,8 @@ func main() {
 		}
 
 		cancel(conn, filepath)
+	case "serverinfo":
+		getServerInfo(conn)
 	case "help", "-h", "--help":
 		printHelp()
 		os.Exit(0)

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -52,8 +54,11 @@ func runDownloadServer(listeners []*net.Listener) {
 						} else {
 							dose.WriteMessage(c, dose.CanceledResponse{r.Path})
 						}
+					case *dose.ServerInfoRequest:
+						log.Printf("ServerInfoRequest")
+						dose.WriteMessage(c, dose.ServerInfoResponse{downloadServer.ServerInfo()})
 					default:
-						return
+						dose.WriteMessage(c, dose.ErrorResponse{"Unimplemented function"})
 					}
 				}(conn)
 			}
@@ -65,6 +70,7 @@ func runDownloadServer(listeners []*net.Listener) {
 
 type Download struct {
 	Url       string
+	Path      string
 	Status    dose.DownloadStatus
 	BytesRead uint
 	Filesize  *uint
@@ -81,6 +87,7 @@ func (s *DownloadServer) Download(url string, path string) {
 	var mu sync.Mutex
 	download := &Download{
 		Url:       url,
+		Path:      path,
 		Status:    dose.Queued,
 		BytesRead: 0,
 		Filesize:  nil,
@@ -103,6 +110,13 @@ func (s *DownloadServer) Download(url string, path string) {
 			return
 		}
 		defer resp.Body.Close()
+
+		if len := resp.Header.Get("Content-Length"); len != "" {
+			if asInt, err := strconv.Atoi(len); err == nil {
+				asUint := uint(asInt)
+				(*download).Filesize = &asUint
+			}
+		}
 
 		newContext, cancelFunc := context.WithCancel(resp.Request.Context())
 		download.Cancel = cancelFunc
@@ -146,3 +160,50 @@ func (s *DownloadServer) Cancel(path string) error {
 
 	return errors.New("Download not found")
 }
+
+func (s *DownloadServer) ServerInfo() []dose.DownloadResponse {
+	sorted := downloads([]dose.DownloadResponse{})
+	for _, download := range s.Downloads {
+		response := dose.DownloadResponse{
+			Url:       download.Url,
+			Path:      download.Path,
+			Status:    download.Status,
+			BytesRead: download.BytesRead,
+			Filesize:  download.Filesize,
+			StartTime: download.StartTime,
+		}
+		sorted = append(sorted, response)
+	}
+	sort.Sort(sorted)
+
+	return sorted
+}
+
+type downloads []dose.DownloadResponse
+
+func (d downloads) Len() int {
+	return len(d)
+}
+
+func (d downloads) Less(i, j int) bool {
+	return d[i].StartTime.Before(d[j].StartTime)
+}
+
+func (d downloads) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+
+//func main() {
+//	var reviews_data_map = make(map[string]reviews_data)
+//	reviews_data_map["1"] = reviews_data{date: time.Now().Add(12 * time.Hour)}
+//	reviews_data_map["2"] = reviews_data{date: time.Now()}
+//	reviews_data_map["3"] = reviews_data{date: time.Now().Add(24 * time.Hour)}
+//	//Sort the map by date
+//	date_sorted_reviews := make(timeSlice, 0, len(reviews_data_map))
+//	for _, d := range reviews_data_map {
+//		date_sorted_reviews = append(date_sorted_reviews, d)
+//	}
+//	fmt.Println(date_sorted_reviews)
+//	sort.Sort(date_sorted_reviews)
+//	fmt.Println(date_sorted_reviews)
+//}

@@ -13,6 +13,10 @@ type Auth struct {
 	db *sql.DB
 }
 
+func (a *Auth) AuthRequired() bool {
+	return true
+}
+
 func (a *Auth) CheckAuthentication(username, password string) (bool, error) {
 	var dbPass string
 

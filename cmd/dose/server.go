@@ -24,7 +24,7 @@ type DownloadServer struct {
 }
 
 func runDownloadServer(listeners []*net.Listener) {
-	downloadServer := DownloadServer{make(map[string]*Download), dummy.Auth{}}
+	downloadServer := DownloadServer{make(map[string]*Download), dummy.NoAuth{}}
 
 	var wg sync.WaitGroup
 	for _, l := range listeners {
@@ -38,6 +38,7 @@ func runDownloadServer(listeners []*net.Listener) {
 					defer c.Close()
 
 					isAuthed := false
+					needsAuth := downloadServer.auth.AuthRequired()
 
 					for {
 						request, err := dose.ReadMessage(c)
@@ -46,7 +47,7 @@ func runDownloadServer(listeners []*net.Listener) {
 							return
 						}
 
-						if isAuthed {
+						if isAuthed || !needsAuth {
 							switch r := request.(type) {
 							case *dose.AddRequest:
 								log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)

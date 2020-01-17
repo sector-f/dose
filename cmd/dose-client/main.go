@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net/url"
 	"os"
+	"syscall"
 
+	"github.com/sector-f/dose"
 	"github.com/spf13/pflag"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var (
@@ -43,6 +47,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	args := pflag.Args()
+	if len(args) < 1 {
+		printHelp()
+		os.Exit(1)
+	}
+
 	conn, err := bind(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -50,12 +60,13 @@ func main() {
 	}
 	defer conn.Close()
 
-	args := pflag.Args()
-
-	if len(args) < 1 {
-		printHelp()
-		os.Exit(1)
-	}
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter username: ")
+	username, _ := reader.ReadString('\n')
+	fmt.Print("Enter password: ")
+	password, _ := terminal.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	dose.WriteMessage(conn, dose.AuthRequest{username, string(password)})
 
 	switch args[0] {
 	case "add":

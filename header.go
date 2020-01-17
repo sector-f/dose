@@ -28,6 +28,7 @@ const (
 
 type Message interface {
 	MessageType() MessageType
+	String() string
 }
 
 func WriteMessage(w io.Writer, m Message) (int, error) {

@@ -24,7 +24,7 @@ type DownloadServer struct {
 }
 
 func runDownloadServer(listeners []*net.Listener) {
-	downloadServer := DownloadServer{make(map[string]*Download), dummy.NoAuth{}}
+	downloadServer := DownloadServer{make(map[string]*Download), dummy.EmptyAuth{}}
 
 	var wg sync.WaitGroup
 	for _, l := range listeners {
@@ -47,14 +47,16 @@ func runDownloadServer(listeners []*net.Listener) {
 							return
 						}
 
+						log.Println(request)
+
 						if isAuthed || !needsAuth {
 							switch r := request.(type) {
 							case *dose.AddRequest:
-								log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
+								// log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
 								downloadServer.Download(r.Url, r.Path)
-								dose.WriteMessage(c, dose.AddedResponse{r.Path})
+								dose.WriteMessage(c, dose.AddedResponse{r.Url, r.Path})
 							case *dose.CancelRequest:
-								log.Printf("CancelRequest: %s\n", r.Path)
+								// log.Printf("CancelRequest: %s\n", r.Path)
 								err := downloadServer.Cancel(r.Path)
 								if err != nil {
 									dose.WriteMessage(c, dose.ErrorResponse{err.Error()})
@@ -62,7 +64,7 @@ func runDownloadServer(listeners []*net.Listener) {
 									dose.WriteMessage(c, dose.CanceledResponse{r.Path})
 								}
 							case *dose.ServerInfoRequest:
-								log.Printf("ServerInfoRequest")
+								// log.Printf("ServerInfoRequest")
 								dose.WriteMessage(c, dose.ServerInfoResponse{downloadServer.ServerInfo()})
 							default:
 								dose.WriteMessage(c, dose.ErrorResponse{"Unimplemented function"})

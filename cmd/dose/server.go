@@ -24,7 +24,7 @@ type DownloadServer struct {
 }
 
 func runDownloadServer(listeners []*net.Listener) {
-	downloadServer := DownloadServer{make(map[string]*Download), dummy.EmptyAuth{}}
+	downloadServer := DownloadServer{make(map[string]*Download), dummy.NoAuth{}}
 
 	var wg sync.WaitGroup
 	for _, l := range listeners {

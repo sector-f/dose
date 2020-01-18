@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net/url"
 	"os"
+	"syscall"
 
+	"github.com/sector-f/dose"
 	"github.com/spf13/pflag"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var (
 	socketAddr    string
 	allowInsecure bool
+	noAuth        bool
 )
 
 func printHelp() {
@@ -22,6 +27,7 @@ func printHelp() {
 func main() {
 	pflag.StringVarP(&socketAddr, "bind", "b", "unix:///tmp/dose.socket", "tcp[s]:// or unix[s]:// addr to connect to")
 	pflag.BoolVarP(&allowInsecure, "insecure", "k", false, "Accept certificates from server even if they can't be validated")
+	pflag.BoolVarP(&noAuth, "noauth", "n", false, "Skip sending a username/password to the server")
 	showHelp := pflag.BoolP("help", "h", false, "Show help message")
 	pflag.Parse()
 
@@ -43,6 +49,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	args := pflag.Args()
+	if len(args) < 1 {
+		printHelp()
+		os.Exit(1)
+	}
+
 	conn, err := bind(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -50,11 +62,14 @@ func main() {
 	}
 	defer conn.Close()
 
-	args := pflag.Args()
-
-	if len(args) < 1 {
-		printHelp()
-		os.Exit(1)
+	if !noAuth {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Enter username: ")
+		username, _ := reader.ReadString('\n')
+		fmt.Print("Enter password: ")
+		password, _ := terminal.ReadPassword(int(syscall.Stdin))
+		fmt.Println()
+		dose.WriteMessage(conn, dose.AuthRequest{username, string(password)})
 	}
 
 	switch args[0] {

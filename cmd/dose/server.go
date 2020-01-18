@@ -15,14 +15,16 @@ import (
 	"time"
 
 	"github.com/sector-f/dose"
+	"github.com/sector-f/dose/cmd/dose/dummy"
 )
 
 type DownloadServer struct {
 	Downloads map[string]*Download // Map path to Download
+	auth      AuthService
 }
 
 func runDownloadServer(listeners []*net.Listener) {
-	downloadServer := DownloadServer{make(map[string]*Download)}
+	downloadServer := DownloadServer{make(map[string]*Download), dummy.NoAuth{}}
 
 	var wg sync.WaitGroup
 	for _, l := range listeners {
@@ -35,30 +37,53 @@ func runDownloadServer(listeners []*net.Listener) {
 				go func(c net.Conn) {
 					defer c.Close()
 
-					request, err := dose.ReadMessage(c)
-					if err != nil {
-						log.Println(err)
-						return
-					}
+					isAuthed := false
+					needsAuth := downloadServer.auth.AuthRequired()
 
-					switch r := request.(type) {
-					case *dose.AddRequest:
-						log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
-						downloadServer.Download(r.Url, r.Path)
-						dose.WriteMessage(c, dose.AddedResponse{r.Path})
-					case *dose.CancelRequest:
-						log.Printf("CancelRequest: %s\n", r.Path)
-						err := downloadServer.Cancel(r.Path)
+					for {
+						request, err := dose.ReadMessage(c)
 						if err != nil {
-							dose.WriteMessage(c, dose.ErrorResponse{err.Error()})
-						} else {
-							dose.WriteMessage(c, dose.CanceledResponse{r.Path})
+							log.Println(err)
+							return
 						}
-					case *dose.ServerInfoRequest:
-						log.Printf("ServerInfoRequest")
-						dose.WriteMessage(c, dose.ServerInfoResponse{downloadServer.ServerInfo()})
-					default:
-						dose.WriteMessage(c, dose.ErrorResponse{"Unimplemented function"})
+
+						log.Println(request)
+
+						if isAuthed || !needsAuth {
+							switch r := request.(type) {
+							case *dose.AddRequest:
+								// log.Printf("AddRequest: %s\t%s\n", r.Url, r.Path)
+								downloadServer.Download(r.Url, r.Path)
+								dose.WriteMessage(c, dose.AddedResponse{r.Url, r.Path})
+							case *dose.CancelRequest:
+								// log.Printf("CancelRequest: %s\n", r.Path)
+								err := downloadServer.Cancel(r.Path)
+								if err != nil {
+									dose.WriteMessage(c, dose.ErrorResponse{err.Error()})
+								} else {
+									dose.WriteMessage(c, dose.CanceledResponse{r.Path})
+								}
+							case *dose.ServerInfoRequest:
+								// log.Printf("ServerInfoRequest")
+								dose.WriteMessage(c, dose.ServerInfoResponse{downloadServer.ServerInfo()})
+							default:
+								dose.WriteMessage(c, dose.ErrorResponse{"Unimplemented function"})
+							}
+
+							return // Probably remove this eventually to allow multiple messages in the same session
+						} else {
+							switch r := request.(type) {
+							case *dose.AuthRequest:
+								success, err := downloadServer.auth.CheckAuthentication(r.Username, r.Password)
+								if err != nil {
+									dose.WriteMessage(c, dose.ErrorResponse{err.Error()})
+								}
+
+								isAuthed = success
+							default:
+								dose.WriteMessage(c, dose.ErrorResponse{"Authentication required"})
+							}
+						}
 					}
 				}(conn)
 			}
